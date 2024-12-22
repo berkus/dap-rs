@@ -552,6 +552,7 @@ where
                 // Run requested JTAG sequences. Cannot fail.
                 let size = jtag.sequences(req.rest(), resp.remaining());
                 resp.skip(size as _);
+                // FIXME
 
                 resp.write_ok();
             }
@@ -561,10 +562,12 @@ where
 
     fn process_jtag_configure(&self, _req: Request, _resp: &mut ResponseWriter) {
         // TODO: Implement one day (needs proper JTAG support)
+        // FIXME
     }
 
     fn process_jtag_idcode(&self, _req: Request, _resp: &mut ResponseWriter) {
         // TODO: Implement one day (needs proper JTAG support)
+        // FIXME
     }
 
     fn process_transfer_configure(&mut self, mut req: Request, resp: &mut ResponseWriter) {

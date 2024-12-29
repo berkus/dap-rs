@@ -69,7 +69,7 @@ where
     pub fn process_command(
         &mut self,
         report: &[u8],
-        rbuf: &mut [u8],
+        response_buf: &mut [u8],
         version: DapVersion,
     ) -> usize {
         let req = match Request::from_report(report) {
@@ -77,7 +77,7 @@ where
             None => return 0,
         };
 
-        let resp = &mut ResponseWriter::new(req.command, rbuf);
+        let resp = &mut ResponseWriter::new(req.command, response_buf);
 
         // defmt::trace!("Dap command: {}", req.command);
 

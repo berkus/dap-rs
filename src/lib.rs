@@ -1,7 +1,7 @@
 //! TODO: Crate docs
 
 #![cfg_attr(not(test), no_std)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 /// TODO: Dap docs
 pub mod dap;

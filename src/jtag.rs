@@ -3,6 +3,8 @@ pub trait Jtag<DEPS>: From<DEPS> {
     const AVAILABLE: bool;
 
     /// Handle a JTAG sequence request.
+    ///
+    /// Returns the number of bytes of rxbuf which were written to.
     fn sequences(&mut self, data: &[u8], rxbuf: &mut [u8]) -> u32;
 
     /// Set the maximum clock frequency, return `true` if it is valid.

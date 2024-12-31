@@ -25,6 +25,7 @@ impl<B: UsbBus> CmsisDapV2<'_, B> {
     }
 
     pub fn process(&mut self) -> Option<Request> {
+        // defmt::trace!("CmsisDapV2::process");
         let mut buf = [0u8; DAP2_PACKET_SIZE as usize];
         match self.read_ep.read(&mut buf) {
             Ok(size) if size > 0 => Some(Request::DAP2Command((buf, size))),

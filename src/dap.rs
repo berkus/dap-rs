@@ -79,7 +79,7 @@ where
 
         let resp = &mut ResponseWriter::new(req.command, response_buf);
 
-        // defmt::trace!("Dap command: {}", req.command);
+        defmt::trace!("Dap command: {}", req.command);
 
         match req.command {
             Command::DAP_Info => self.process_info(req, resp, version),
@@ -226,12 +226,12 @@ where
             }
         };
 
-        // defmt::info!(
-        // "DAP connect: {}, SWD: {}, JTAG: {}",
-        // port,
-        // SWD::AVAILABLE,
-        // JTAG::AVAILABLE
-        // );
+        defmt::info!(
+            "DAP connect: {}, SWD: {}, JTAG: {}",
+            port,
+            SWD::AVAILABLE,
+            JTAG::AVAILABLE
+        );
 
         match (SWD::AVAILABLE, JTAG::AVAILABLE, port) {
             // SWD
@@ -247,6 +247,7 @@ where
             (true, true, ConnectPort::JTAG)
             | (false, true, ConnectPort::Default)
             | (false, true, ConnectPort::JTAG) => {
+                defmt::trace!("Switching to JTAG mode");
                 self.state.to_jtag();
                 resp.write_u8(ConnectPortResponse::JTAG as u8);
             }
@@ -280,7 +281,7 @@ where
         let word = req.next_u32();
         match (SWD::AVAILABLE, JTAG::AVAILABLE, &mut self.state) {
             (_, true, State::Jtag(_jtag)) => {
-                // TODO: Implement one day.
+                // TODO: Implement one day. -- fixme @berkus
                 let _ = idx;
                 resp.write_err();
             }
@@ -385,31 +386,33 @@ where
 
         resp.write_ok(); // assume ok until we finish
         let sequence_count = req.next_u8();
-        let success = (0..sequence_count).map(|_| {
-            // parse the seqnence info
-            let sequence_info = req.next_u8();
-            let nbits: usize = match sequence_info & 0x3F {
-                // CMSIS-DAP says 0 means 64 bits
-                0 => 64,
-                // Other integers are normal.
-                n => n as usize,
-            };
-            let nbytes = (nbits + 7) / 8;
-            let output = (sequence_info & 0x80) == 0;
+        let success = (0..sequence_count)
+            .map(|_| {
+                // parse the sequence info
+                let sequence_info = req.next_u8();
+                let nbits: usize = match sequence_info & 0x3F {
+                    // CMSIS-DAP says 0 means 64 bits
+                    0 => 64,
+                    // Other integers are normal.
+                    n => n as usize,
+                };
+                let nbytes = (nbits + 7) / 8;
+                let output = (sequence_info & 0x80) == 0;
 
-            if output {
-                let output_data = req.data.get(..nbytes).ok_or(())?;
-                swd.write_sequence(nbits, output_data).or(Err(()))?;
-                req.consume(nbytes);
-                Ok(0)
-            } else {
-                let input_data = resp.remaining().get_mut(..nbytes).ok_or(())?;
-                swd.read_sequence(nbits, input_data).or(Err(()))?;
-                resp.skip(nbytes);
-                Ok(nbytes)
-            }
-        }).all(|r: Result<usize, ()>| r.is_ok());
-        
+                if output {
+                    let output_data = req.data.get(..nbytes).ok_or(())?;
+                    swd.write_sequence(nbits, output_data).or(Err(()))?;
+                    req.consume(nbytes);
+                    Ok(0)
+                } else {
+                    let input_data = resp.remaining().get_mut(..nbytes).ok_or(())?;
+                    swd.read_sequence(nbits, input_data).or(Err(()))?;
+                    resp.skip(nbytes);
+                    Ok(nbytes)
+                }
+            })
+            .all(|r: Result<usize, ()>| r.is_ok());
+
         if !success {
             resp.write_u8_at(0, 0xFF);
         }
@@ -545,29 +548,38 @@ where
     }
 
     fn process_jtag_sequence(&mut self, req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_jtag_sequence");
         self.state.to_jtag();
 
         match &mut self.state {
             State::Jtag(jtag) => {
+                resp.write_ok();
                 // Run requested JTAG sequences. Cannot fail.
                 let size = jtag.sequences(req.rest(), resp.remaining());
                 resp.skip(size as _);
-                // FIXME
-
-                resp.write_ok();
             }
             _ => resp.write_err(),
         };
     }
 
-    fn process_jtag_configure(&self, _req: Request, _resp: &mut ResponseWriter) {
-        // TODO: Implement one day (needs proper JTAG support)
-        // FIXME
+    fn process_jtag_configure(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_jtag_configure");
+        self.state.to_jtag();
+
+        let chain_count = req.next_u8();
+        for i in 1..=chain_count {
+            let _device_ir_len = req.next_u8();
+        }
+        resp.write_ok();
     }
 
-    fn process_jtag_idcode(&self, _req: Request, _resp: &mut ResponseWriter) {
-        // TODO: Implement one day (needs proper JTAG support)
-        // FIXME
+    fn process_jtag_idcode(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_jtag_idcode");
+        self.state.to_jtag();
+
+        let _chain_index = req.next_u8();
+        resp.write_ok();
+        resp.write_u32(0x00a20f0f);
     }
 
     fn process_transfer_configure(&mut self, mut req: Request, resp: &mut ResponseWriter) {
@@ -996,17 +1008,26 @@ mod test {
         );
 
         // write 8 bits, read 5 bits, write 33 bits
-        let report = [0x1Du8, 3, 8, 0b10111101, 0x80 | 5, 33, 0x56, 0x83, 0xAB, 0x32, 0x01];
+        let report = [
+            0x1Du8,
+            3,
+            8,
+            0b10111101,
+            0x80 | 5,
+            33,
+            0x56,
+            0x83,
+            0xAB,
+            0x32,
+            0x01,
+        ];
         let mut rbuf = [0u8; 64];
         dap.state.to_swd();
         match &mut dap.state {
             State::Swd(swd) => {
                 swd.expect_write_sequence()
                     .once()
-                    .with(
-                        eq(8),
-                        eq([0b10111101u8]),
-                    )
+                    .with(eq(8), eq([0b10111101u8]))
                     .return_const(Ok(()));
                 swd.expect_read_sequence()
                     .once()
@@ -1017,19 +1038,13 @@ mod test {
                     });
                 swd.expect_write_sequence()
                     .once()
-                    .with(
-                        eq(33),
-                        eq([0x56, 0x83, 0xAB, 0x32, 0x01]),
-                    )
+                    .with(eq(33), eq([0x56, 0x83, 0xAB, 0x32, 0x01]))
                     .return_const(Ok(()));
             }
             _ => assert!(false, "can't switch to swd"),
         }
         let rsize = dap.process_command(&report, &mut rbuf, DapVersion::V2);
         assert_eq!(rsize, 3);
-        assert_eq!(
-            &rbuf[..3],
-            &[0x1Du8, 0x00, 0x1F]
-        )
+        assert_eq!(&rbuf[..3], &[0x1Du8, 0x00, 0x1F])
     }
 }

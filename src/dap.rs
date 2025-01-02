@@ -570,7 +570,7 @@ where
     }
 
     fn process_jtag_sequence(&mut self, req: Request, resp: &mut ResponseWriter) {
-        defmt::trace!("process_jtag_sequence");
+        defmt::debug!("process_jtag_sequence");
         self.state.to_jtag();
 
         match &mut self.state {

@@ -26,6 +26,7 @@ const VENDOR_CODE: u8 = 0x41;
 const DAP_V2_INTERFACE: u8 = 3;
 const DFU_INTERFACE: u8 = 4;
 
+#[allow(dead_code)]
 enum MsDescriptorTypes {
     Header = 0x0,
     HeaderConfiguration = 0x1,

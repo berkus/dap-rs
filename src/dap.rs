@@ -72,6 +72,8 @@ where
         response_buf: &mut [u8],
         version: DapVersion,
     ) -> usize {
+        defmt::trace!("Dap command pre-parse");
+
         let req = match Request::from_report(report) {
             Some(req) => req,
             None => return 0,
@@ -114,7 +116,9 @@ where
             }
             Command::DAP_ExecuteCommands => self.process_execute_commands(req, resp),
             Command::DAP_QueueCommands => self.process_queue_commands(req, resp),
-            Command::Unimplemented => {}
+            Command::Unimplemented => {
+                panic!("Ugh oh!")
+            }
         }
 
         resp.idx
@@ -132,6 +136,7 @@ where
     }
 
     fn process_info(&mut self, mut req: Request, resp: &mut ResponseWriter, version: DapVersion) {
+        defmt::trace!("process_info");
         match DapInfoID::try_from(req.next_u8()) {
             // Return 0-length string for VendorID, ProductID, SerialNumber
             // to indicate they should be read from USB descriptor instead
@@ -201,6 +206,7 @@ where
     }
 
     fn process_host_status(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_host_status");
         let status_type = req.next_u8();
         let status_status = req.next_u8();
         // Use HostStatus to set our LED when host is connected to target
@@ -263,6 +269,7 @@ where
     }
 
     fn process_disconnect(&mut self, _req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_disconnect");
         self.state.to_none();
 
         if let State::None { deps, .. } = &mut self.state {
@@ -275,6 +282,7 @@ where
     }
 
     fn process_write_abort(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_write_abort");
         self.state.to_last_mode();
 
         let idx = req.next_u8();
@@ -298,18 +306,21 @@ where
     }
 
     fn process_delay(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_delay");
         let delay = req.next_u16() as u32;
         self.wait.delay_us(delay);
         resp.write_ok();
     }
 
     fn process_reset_target(&mut self, _req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_reset_target");
         resp.write_ok();
         // "No device specific reset sequence is implemented"
         resp.write_u8(0);
     }
 
     fn process_swj_pins(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swj_pins");
         let output = swj::Pins::from_bits_truncate(req.next_u8());
         let mask = swj::Pins::from_bits_truncate(req.next_u8());
         let wait_us = req.next_u32().min(3_000_000); // Defined as max 3 seconds
@@ -324,6 +335,7 @@ where
     }
 
     fn process_swj_clock(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swj_clock");
         let max_frequency = req.next_u32();
         let valid = self.state.set_clock(max_frequency);
 
@@ -335,6 +347,7 @@ where
     }
 
     fn process_swj_sequence(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swj_sequence");
         let nbits: usize = match req.next_u8() {
             // CMSIS-DAP says 0 means 256 bits
             0 => 256,
@@ -363,6 +376,7 @@ where
     }
 
     fn process_swd_configure(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swd_configure");
         // TODO: Do we want to support other configs?
         let config = req.next_u8();
         let clk_period = config & 0b011;
@@ -375,6 +389,7 @@ where
     }
 
     fn process_swd_sequence(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swd_sequence");
         self.state.to_swd();
         let swd = match &mut self.state {
             State::Swd(swd) => swd,
@@ -419,6 +434,7 @@ where
     }
 
     fn process_swo_transport(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swo_transport");
         let transport = req.next_u8();
         match swo::SwoTransport::try_from(transport) {
             Ok(swo::SwoTransport::None) | Ok(swo::SwoTransport::DAPCommand) => {
@@ -434,6 +450,7 @@ where
     }
 
     fn process_swo_mode(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swo_mode");
         let mode = req.next_u8();
 
         let swo = if let Some(swo) = &mut self.swo {
@@ -453,6 +470,7 @@ where
     }
 
     fn process_swo_baudrate(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swo_baudrate");
         let target = req.next_u32();
         let actual = if let Some(swo) = &mut self.swo {
             swo.set_baudrate(target)
@@ -463,6 +481,7 @@ where
     }
 
     fn process_swo_control(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swo_control");
         let swo = if let Some(swo) = &mut self.swo {
             swo
         } else {
@@ -480,6 +499,7 @@ where
     }
 
     fn process_swo_status(&mut self, _req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swo_status");
         // Trace status:
         // Bit 0: trace capture active
         // Bit 6: trace stream error (always written as 0)
@@ -496,6 +516,7 @@ where
     }
 
     fn process_swo_extended_status(&mut self, _req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swo_extended_status");
         // Trace status:
         // Bit 0: trace capture active
         // Bit 6: trace stream error (always written as 0)
@@ -515,6 +536,7 @@ where
     }
 
     fn process_swo_data(&mut self, mut req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_swo_data");
         let active = if let Some(swo) = &mut self.swo {
             swo.is_active()
         } else {
@@ -567,7 +589,7 @@ where
         self.state.to_jtag();
 
         let chain_count = req.next_u8();
-        for i in 1..=chain_count {
+        for _ in 1..=chain_count {
             let _device_ir_len = req.next_u8();
         }
         resp.write_ok();

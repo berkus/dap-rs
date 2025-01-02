@@ -133,7 +133,10 @@ where
             state => state.replace_with(|s| match s {
                 State::None { deps, .. } => State::Jtag(deps.into()),
                 State::Swd(v) => State::Jtag(DEPS::from(v).into()),
-                State::Jtag(_) | State::Invalid => unreachable!(),
+                State::Jtag(_) | State::Invalid => {
+                    defmt::error!("unreachable");
+                    unreachable!()
+                }
             }),
         }
     }

@@ -590,7 +590,7 @@ where
         self.state.to_jtag();
 
         let chain_count = req.next_u8();
-        for i in 1..=chain_count {
+        for _ in 1..=chain_count {
             let _device_ir_len = req.next_u8();
         }
         resp.write_ok();

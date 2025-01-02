@@ -578,6 +578,7 @@ where
                 resp.write_ok();
                 // Run requested JTAG sequences. Cannot fail.
                 let size = jtag.sequences(req.rest(), resp.remaining());
+                defmt::trace!("process_jtag_sequence: TDO wrote {} bytes", size);
                 resp.skip(size as _);
             }
             _ => resp.write_err(),

@@ -589,11 +589,16 @@ where
         defmt::trace!("process_jtag_configure - @todo");
         self.state.to_jtag();
 
-        let chain_count = req.next_u8();
-        for _ in 1..=chain_count {
-            let _device_ir_len = req.next_u8();
-        }
-        resp.write_ok();
+        match &mut self.state {
+            State::Jtag(jtag) => {
+                if jtag.configure_taps(req.rest()).is_ok() {
+                    resp.write_ok();
+                } else {
+                    resp.write_err();
+                }
+            }
+            _ => resp.write_err(),
+        };
     }
 
     fn process_jtag_idcode(&mut self, mut req: Request, resp: &mut ResponseWriter) {

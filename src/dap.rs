@@ -586,7 +586,7 @@ where
     }
 
     fn process_jtag_configure(&mut self, mut req: Request, resp: &mut ResponseWriter) {
-        defmt::trace!("process_jtag_configure");
+        defmt::trace!("process_jtag_configure - @todo");
         self.state.to_jtag();
 
         let chain_count = req.next_u8();
@@ -597,7 +597,7 @@ where
     }
 
     fn process_jtag_idcode(&mut self, mut req: Request, resp: &mut ResponseWriter) {
-        defmt::trace!("process_jtag_idcode");
+        defmt::trace!("process_jtag_idcode - @todo");
         self.state.to_jtag();
 
         let _chain_index = req.next_u8();
@@ -622,13 +622,17 @@ where
     fn process_transfer(&mut self, mut req: Request, resp: &mut ResponseWriter) {
         self.state.to_last_mode();
 
-        let _idx = req.next_u8();
+        let _idx = req.next_u8(); // used for JTAG (skip IRs configured with JTAG_configure apparently)
         let ntransfers = req.next_u8();
         let mut match_mask = 0xFFFF_FFFFu32;
 
         match &mut self.state {
             State::Jtag(_jtag) => {
+                let idx = _idx;
                 // TODO: Implement one day.
+                // @fixme berkus
+                defmt::trace!("process_transfer: idx {}", idx);
+                resp.write_ok();
             }
             State::Swd(swd) => {
                 // Skip two bytes in resp to reserve space for final status,
@@ -749,6 +753,7 @@ where
         match &mut self.state {
             State::Jtag(_jtag) => {
                 // TODO: Implement one day.
+                // @fixme - berkus
             }
             State::Swd(swd) => {
                 // Skip three bytes in resp to reserve space for final status,

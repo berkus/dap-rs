@@ -631,19 +631,50 @@ where
         let ntransfers = req.next_u8();
         let mut match_mask = 0xFFFF_FFFFu32;
 
+        // Skip two bytes in resp to reserve space for final status,
+        // which we update while processing.
+        resp.write_u16(0);
+
         match &mut self.state {
             State::Jtag(_jtag) => {
                 let idx = _idx;
                 // TODO: Implement one day.
                 // @fixme berkus
                 defmt::trace!("process_transfer: idx {}", idx);
-                resp.write_ok();
+
+                for transfer_idx in 0..ntransfers {
+                    // Store how many transfers we execute in the response
+                    resp.write_u8_at(1, transfer_idx + 1);
+
+                    // Parse the next transfer request
+                    let transfer_req = req.next_u8();
+                    let apndp = swd::APnDP::try_from(transfer_req & (1 << 0)).unwrap();
+                    let rnw = swd::RnW::try_from((transfer_req & (1 << 1)) >> 1).unwrap();
+                    let a = swd::DPRegister::try_from((transfer_req & (3 << 2)) >> 2).unwrap();
+                    let vmatch = (transfer_req & (1 << 4)) != 0;
+                    let mmask = (transfer_req & (1 << 5)) != 0;
+                    let _ts = (transfer_req & (1 << 7)) != 0;
+
+                    let val = if rnw == swd::RnW::W || vmatch || mmask {
+                        req.next_u32()
+                    } else {
+                        0
+                    };
+
+                    defmt::trace!(
+                        "{} {} {} value {}",
+                        if rnw == swd::RnW::R {
+                            "reading"
+                        } else {
+                            "writing"
+                        },
+                        apndp,
+                        a,
+                        val
+                    );
+                }
             }
             State::Swd(swd) => {
-                // Skip two bytes in resp to reserve space for final status,
-                // which we update while processing.
-                resp.write_u16(0);
-
                 for transfer_idx in 0..ntransfers {
                     // Store how many transfers we execute in the response
                     resp.write_u8_at(1, transfer_idx + 1);

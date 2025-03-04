@@ -636,7 +636,7 @@ where
         resp.write_u16(0);
 
         match &mut self.state {
-            State::Jtag(_jtag) => {
+            State::Jtag(jtag) => {
                 let idx = _idx;
                 // TODO: Implement one day.
                 // @fixme berkus
@@ -672,6 +672,25 @@ where
                         a,
                         val
                     );
+
+                    // jtag.taps.select_tap(idx);
+                    if rnw == swd::RnW::R {
+                        let mut read_value = if apndp == swd::APnDP::AP {
+                            // jtag.taps.read_ap(a)
+                        } else {
+                            // jtag.taps.read_dp(a)
+                        };
+                    } else {
+                        if mmask {
+                            match_mask = val;
+                            continue;
+                        }
+                        if apndp == swd::APnDP::AP {
+                            // jtag.taps.write_ap(a, val);
+                        } else {
+                            // jtag.taps.write_dp(a, val);
+                        }
+                    }
                 }
             }
             State::Swd(swd) => {

@@ -4,6 +4,7 @@
 #![allow(missing_docs)]
 
 /// TODO: Dap docs
+pub mod adi;
 pub mod dap;
 pub mod jtag;
 pub mod swd;

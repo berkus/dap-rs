@@ -607,7 +607,7 @@ where
 
         let _chain_index = req.next_u8();
         resp.write_ok();
-        resp.write_u32(0x00a20f0f);
+        resp.write_u32(0x00a20f0f); // @fixme: unused
     }
 
     fn process_transfer_configure(&mut self, mut req: Request, resp: &mut ResponseWriter) {

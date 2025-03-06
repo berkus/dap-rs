@@ -65,7 +65,7 @@ where
 
     fn parse_ack(mut dr: Vec<u8>) -> Result<u32, u8> {
         dr.push(0);
-        dr.push(0);
+        dr.push(0); // pad to 8 bytes
         dr.push(0);
         let val = u64::from_le_bytes(dr.try_into().unwrap());
         let val = val & ((1 << 35) - 1);
@@ -90,7 +90,7 @@ where
         let mut dr = self.taps.finish_dr_read(35);
 
         dr.push(0);
-        dr.push(0);
+        dr.push(0); // pad to 8 bytes
         dr.push(0);
         let val = u64::from_le_bytes(dr.try_into().unwrap());
         let val = val & ((1 << 35) - 1);
@@ -505,35 +505,4 @@ where
 //         }
 //         Ok(())
 //     }
-// }
-
-//==============================================
-// Public interface - read and write AP/DP regs
-//==============================================
-
-// ADIv5.2 B3.4.3
-// ABORT: IR=ABORT, DR=35bit ABORT REG
-// DPACC: IR=DPACC, DR=35bit DPACC REG, ACK+value
-// APACC: IR=APACC, DR=35bit APACC REG - selects AP via DP SELECT register
-
-// pub fn write_dp(&mut self, reg: swd::DPRegister, val: u64) {
-//     self.write_ir(DPACC);
-//     self.write_dr(reg + val);
-// }
-
-// pub fn write_ap(&mut self, reg: swd::DPRegister, val: u64) {
-//     self.write_ir(APACC);
-//     self.write_dr(reg + val);
-// }
-
-// pub fn read_ap(&mut self, reg: swd::DPRegister) -> u64 {
-//     self.write_ir(APACC);
-//     self.write_dr(reg);
-//     self.read_dr()
-// }
-
-// pub fn read_dp(&mut self, reg: swd::DPRegister) -> u64 {
-//     self.write_ir(DPACC);
-//     self.write_dr(reg);
-//     self.read_dr()
 // }

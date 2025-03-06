@@ -673,12 +673,17 @@ where
                         val
                     );
 
-                    jtag.taps.select_tap(idx);
+                    // code here drives the TAPs in the following way:
+                    // 1. select_tap shall use JTAG sm to perform tms_sequence / sequences to write selected
+                    // TAP IR and put all other IRs in bypass.
+                    // 2.
+
+                    jtag.taps().select_tap(idx);
                     if rnw == swd::RnW::R {
                         let mut read_value = if apndp == swd::APnDP::AP {
-                            jtag.taps.read_ap(a)
+                            jtag.taps().read_ap(a)
                         } else {
-                            jtag.taps.read_dp(a)
+                            jtag.taps().read_dp(a)
                         };
                     } else {
                         if mmask {
@@ -686,9 +691,9 @@ where
                             continue;
                         }
                         if apndp == swd::APnDP::AP {
-                            jtag.taps.write_ap(a, val);
+                            jtag.taps().write_ap(a, val);
                         } else {
-                            jtag.taps.write_dp(a, val);
+                            jtag.taps().write_dp(a, val);
                         }
                     }
                 }

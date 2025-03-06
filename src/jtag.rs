@@ -19,4 +19,6 @@ pub trait Jtag<DEPS>: From<DEPS> {
     fn configure_taps(&mut self, req: &[u8]) -> Result<(), Self::Error>;
 
     // TODO: What is missing for the 2 other JTAG commands
+
+    fn taps(&mut self) -> &Taps; // to access the TAP sm inside JTAG state?
 }

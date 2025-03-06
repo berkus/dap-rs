@@ -1,3 +1,8 @@
+mod sm;
+mod taps;
+
+pub use taps::Taps;
+
 pub trait Jtag<DEPS>: From<DEPS> {
     /// If JTAG is available or not.
     const AVAILABLE: bool;

@@ -585,8 +585,8 @@ where
         };
     }
 
-    fn process_jtag_configure(&mut self, mut req: Request, resp: &mut ResponseWriter) {
-        defmt::trace!("process_jtag_configure - @todo");
+    fn process_jtag_configure(&mut self, req: Request, resp: &mut ResponseWriter) {
+        defmt::trace!("process_jtag_configure");
         self.state.to_jtag();
 
         match &mut self.state {
@@ -638,9 +638,9 @@ where
         match &mut self.state {
             State::Jtag(jtag) => {
                 let idx = _idx;
-                // TODO: Implement one day.
-                // @fixme berkus
-                defmt::trace!("process_transfer: idx {}", idx);
+
+                // @todo MAKE ME
+                defmt::trace!("JTAG process_transfer: idx {}", idx);
 
                 for transfer_idx in 0..ntransfers {
                     // Store how many transfers we execute in the response
@@ -673,12 +673,12 @@ where
                         val
                     );
 
-                    // jtag.taps.select_tap(idx);
+                    jtag.taps.select_tap(idx);
                     if rnw == swd::RnW::R {
                         let mut read_value = if apndp == swd::APnDP::AP {
-                            // jtag.taps.read_ap(a)
+                            jtag.taps.read_ap(a)
                         } else {
-                            // jtag.taps.read_dp(a)
+                            jtag.taps.read_dp(a)
                         };
                     } else {
                         if mmask {
@@ -686,15 +686,17 @@ where
                             continue;
                         }
                         if apndp == swd::APnDP::AP {
-                            // jtag.taps.write_ap(a, val);
+                            jtag.taps.write_ap(a, val);
                         } else {
-                            // jtag.taps.write_dp(a, val);
+                            jtag.taps.write_dp(a, val);
                         }
                     }
                 }
             }
             State::Swd(swd) => {
                 for transfer_idx in 0..ntransfers {
+                    defmt::trace!("SWD process_transfer: idx {}", transfer_idx);
+
                     // Store how many transfers we execute in the response
                     resp.write_u8_at(1, transfer_idx + 1);
 
@@ -791,7 +793,10 @@ where
                     }
                 }
             }
-            _ => return,
+            _ => {
+                defmt::trace!("Shouldn't happen - neither SWD nor JTAG state");
+                return;
+            }
         }
     }
 

@@ -122,3 +122,108 @@ impl JtagState {
         };
     }
 }
+
+//=== Read/write operations on the JtagState machine ===
+
+/// Read `bits` from the data register
+pub fn read_dr(&mut self, bits: usize) -> Vec<u8> {
+    self.change_mode(JtagState::ShiftDR);
+    self.cable.read_data(bits)
+}
+
+/// Read `bits` from  the instruction register
+pub fn read_ir(&mut self, bits: usize) -> Vec<u8> {
+    self.change_mode(JtagState::ShiftIR);
+    self.cable.read_data(bits)
+}
+
+/// Read `bits` from the data register
+pub fn queue_read_dr(&mut self, bits: usize) -> bool {
+    self.change_mode(JtagState::ShiftDR);
+    self.cable.queue_read(bits)
+}
+
+/// Read `bits` from the instruction register
+pub fn queue_read_ir(&mut self, reg: Register, bits: usize) -> bool {
+    self.change_mode(JtagState::ShiftIR);
+    self.cable.queue_read(bits)
+}
+
+/// Write `data` into the data register.  `bits` indicates how many bits
+/// of the last byte should be written (8 indicates that the entire byte should be written).
+/// The mode will either be ShiftIR / ShiftDR if `pause_after` is false, or PauseIR / PauseDR
+/// if `pause_after` is true.  This allows for setting the register with multiple calls to
+/// `write_reg`, which may be more convenient than manual bit-shifting.
+pub fn write_dr(&mut self, data: &[u8], bits: u8, pause_after: bool) {
+    self.change_mode(JtagState::ShiftDR);
+    self.cable.write_data(data, bits, pause_after);
+    if pause_after {
+        self.state = JtagState::PauseDR;
+    }
+}
+
+/// Write `data` into the instruction register.  `bits` indicates how many bits
+/// of the last byte should be written (8 indicates that the entire byte should be written).
+/// The mode will either be ShiftIR / ShiftDR if `pause_after` is false, or PauseIR / PauseDR
+/// if `pause_after` is true.  This allows for setting the register with multiple calls to
+/// `write_reg`, which may be more convenient than manual bit-shifting.
+pub fn write_ir(&mut self, data: &[u8], bits: u8, pause_after: bool) {
+    self.change_mode(JtagState::ShiftIR);
+    self.cable.write_data(data, bits, pause_after);
+    if pause_after {
+        self.state = JtagState::PauseIR;
+    }
+}
+
+/// Write `data` into either the instruction or data register. `bits` indicates how many bits
+/// of the last byte should be written (8 indicates that the entire byte should be written).
+/// The mode will either be ShiftIR / ShiftDR if `pause_after` is false, or PauseIR / PauseDR
+/// if `pause_after` is true.  This allows for setting the register with multiple calls to
+/// `read_write_reg`, which may be more convenient than manual bit-shifting.
+///
+/// Similar to `write_reg` except it returns the bits that were shifted out during writing.
+pub fn read_write_reg(
+    &mut self,
+    reg: Register,
+    data: &[u8],
+    bits: u8,
+    pause_after: bool,
+) -> Vec<u8> {
+    if reg == Register::Data {
+        self.change_mode(JtagState::ShiftDR);
+    } else {
+        self.change_mode(JtagState::ShiftIR);
+    }
+    let data = self.cable.read_write_data(data, bits, pause_after);
+    if pause_after {
+        if reg == Register::Data {
+            self.state = JtagState::PauseDR;
+        } else {
+            self.state = JtagState::PauseIR;
+        }
+    }
+    data
+}
+
+pub fn queue_read_write(
+    &mut self,
+    reg: Register,
+    data: &[u8],
+    bits: u8,
+    pause_after: bool,
+) -> bool {
+    if reg == Register::Data {
+        self.change_mode(JtagState::ShiftDR);
+    } else {
+        self.change_mode(JtagState::ShiftIR);
+    }
+    let data = self.cable.queue_read_write(data, bits, pause_after);
+    if pause_after {
+        if reg == Register::Data {
+            self.state = JtagState::PauseDR;
+        } else {
+            self.state = JtagState::PauseIR;
+        }
+    }
+    data
+}

@@ -1,7 +1,7 @@
 use crate::swd::Error;
 use crate::swd::{APnDP, DPRegister};
 
-type Result<T> = core::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 pub trait ArmDebugInterface {
     /// Helper method over `read_inner` to retry during `AckWait`.

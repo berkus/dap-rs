@@ -5,6 +5,7 @@ mod request;
 mod response;
 mod state;
 
+pub use jtag::*;
 pub use {command::*, request::*, response::*};
 
 pub use embedded_hal::delay::DelayNs;
@@ -72,16 +73,16 @@ where
         response_buf: &mut [u8],
         version: DapVersion,
     ) -> usize {
-        defmt::trace!("Dap command pre-parse");
+        // defmt::trace!("Dap command pre-parse");
 
         let req = match Request::from_report(report) {
             Some(req) => req,
             None => return 0,
         };
 
-        let resp = &mut ResponseWriter::new(req.command, response_buf);
+        defmt::trace!("DAP command: {}", req.command);
 
-        defmt::trace!("Dap command: {}", req.command);
+        let resp = &mut ResponseWriter::new(req.command, response_buf);
 
         match req.command {
             Command::DAP_Info => self.process_info(req, resp, version),
@@ -678,23 +679,15 @@ where
                     // TAP IR and put all other IRs in bypass.
                     // 2.
 
-                    jtag.taps().select_tap(idx);
+                    // jtag.taps().select_tap(idx);
                     if rnw == swd::RnW::R {
-                        let mut read_value = if apndp == swd::APnDP::AP {
-                            jtag.taps().read_ap(a)
-                        } else {
-                            jtag.taps().read_dp(a)
-                        };
+                        // let mut read_value = jtag.taps().read(apndp, a);
                     } else {
                         if mmask {
                             match_mask = val;
                             continue;
                         }
-                        if apndp == swd::APnDP::AP {
-                            jtag.taps().write_ap(a, val);
-                        } else {
-                            jtag.taps().write_dp(a, val);
-                        }
+                        // jtag.taps().write(apndp, a, val);
                     }
                 }
             }

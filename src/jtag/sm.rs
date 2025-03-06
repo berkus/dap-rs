@@ -1,7 +1,7 @@
 // This is wholly snatched from probe-rs - probably deserves it's own JTAG SM crate?
 
 /// Inner states of the parallel arms (IR-Scan and DR-Scan) of the JTAG state machine.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, defmt::Format)]
 pub(crate) enum RegisterState {
     Select,
     Capture,
@@ -53,7 +53,7 @@ impl RegisterState {
 }
 
 /// JTAG State Machine representation.
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, defmt::Format)]
 pub enum JtagState {
     #[default]
     Reset,
@@ -123,7 +123,7 @@ impl JtagState {
             Self::Dr(state) => Self::Dr(state.update(tms)),
             Self::Ir(state) => Self::Ir(state.update(tms)),
         };
-        defmt::traсe!("JTAG SM state: {}", *self);
+        defmt::trace!("JTAG SM state: {}", *self);
     }
 }
 

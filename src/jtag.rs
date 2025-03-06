@@ -1,6 +1,7 @@
 mod sm;
 mod taps;
 
+pub use sm::JtagState;
 pub use taps::Taps;
 
 pub trait Jtag<DEPS>: From<DEPS> {

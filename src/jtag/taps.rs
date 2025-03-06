@@ -8,8 +8,6 @@ struct Tap {
 const MAX_TAPS: usize = 8; // @fixme As per ADI v5.2 A1-35 "Choices for JTAG-APs"
 
 pub struct Taps {
-    // jtag state: we control state ourselves and the probe-rs knows to restart the SM after DAP_Transfer cmd...
-    jtag_state: JtagState, // for switching read-write modes
     taps: [Tap; MAX_TAPS],
     num_taps: usize,
     active_tap: TapSelect,
@@ -36,7 +34,6 @@ struct TapSelect {
 impl Default for Taps {
     fn default() -> Self {
         Self {
-            jtag_state: JtagState::Reset,
             taps: [Tap::default(); MAX_TAPS],
             num_taps: 0,
             active_tap: TapSelect::default(),

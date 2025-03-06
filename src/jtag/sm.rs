@@ -1,4 +1,4 @@
-// This is wholly snatched from probe-rs - probably deserves it's own JTAG crate?
+// This is wholly snatched from probe-rs - probably deserves it's own JTAG SM crate?
 
 /// Inner states of the parallel arms (IR-Scan and DR-Scan) of the JTAG state machine.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -13,6 +13,7 @@ pub(crate) enum RegisterState {
 }
 
 impl RegisterState {
+    /// Returns the TMS value that takes a step from the current state toward the target state.
     fn step_toward(self, target: Self) -> bool {
         match self {
             Self::Select => false,
@@ -26,6 +27,7 @@ impl RegisterState {
         }
     }
 
+    /// Step the state machine to a new state based on the TMS input value.
     fn update(self, tms: bool) -> Self {
         if tms {
             match self {
@@ -51,8 +53,9 @@ impl RegisterState {
 }
 
 /// JTAG State Machine representation.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum JtagState {
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum JtagState {
+    #[default]
     Reset,
     Idle,
     Dr(RegisterState),
@@ -120,110 +123,27 @@ impl JtagState {
             Self::Dr(state) => Self::Dr(state.update(tms)),
             Self::Ir(state) => Self::Ir(state.update(tms)),
         };
+        defmt::traсe!("JTAG SM state: {}", *self);
     }
 }
 
-//=== Read/write operations on the JtagState machine ===
-
-/// Read `bits` from the data register
-pub fn read_dr(&mut self, bits: usize) -> Vec<u8> {
-    self.change_mode(JtagState::ShiftDR);
-    self.cable.read_data(bits)
-}
-
-/// Read `bits` from  the instruction register
-pub fn read_ir(&mut self, bits: usize) -> Vec<u8> {
-    self.change_mode(JtagState::ShiftIR);
-    self.cable.read_data(bits)
-}
-
-/// Read `bits` from the data register
-pub fn queue_read_dr(&mut self, bits: usize) -> bool {
-    self.change_mode(JtagState::ShiftDR);
-    self.cable.queue_read(bits)
-}
-
-/// Read `bits` from the instruction register
-pub fn queue_read_ir(&mut self, reg: Register, bits: usize) -> bool {
-    self.change_mode(JtagState::ShiftIR);
-    self.cable.queue_read(bits)
-}
-
-/// Write `data` into the data register.  `bits` indicates how many bits
-/// of the last byte should be written (8 indicates that the entire byte should be written).
-/// The mode will either be ShiftIR / ShiftDR if `pause_after` is false, or PauseIR / PauseDR
-/// if `pause_after` is true.  This allows for setting the register with multiple calls to
-/// `write_reg`, which may be more convenient than manual bit-shifting.
-pub fn write_dr(&mut self, data: &[u8], bits: u8, pause_after: bool) {
-    self.change_mode(JtagState::ShiftDR);
-    self.cable.write_data(data, bits, pause_after);
-    if pause_after {
-        self.state = JtagState::PauseDR;
-    }
-}
-
-/// Write `data` into the instruction register.  `bits` indicates how many bits
-/// of the last byte should be written (8 indicates that the entire byte should be written).
-/// The mode will either be ShiftIR / ShiftDR if `pause_after` is false, or PauseIR / PauseDR
-/// if `pause_after` is true.  This allows for setting the register with multiple calls to
-/// `write_reg`, which may be more convenient than manual bit-shifting.
-pub fn write_ir(&mut self, data: &[u8], bits: u8, pause_after: bool) {
-    self.change_mode(JtagState::ShiftIR);
-    self.cable.write_data(data, bits, pause_after);
-    if pause_after {
-        self.state = JtagState::PauseIR;
-    }
-}
-
-/// Write `data` into either the instruction or data register. `bits` indicates how many bits
-/// of the last byte should be written (8 indicates that the entire byte should be written).
-/// The mode will either be ShiftIR / ShiftDR if `pause_after` is false, or PauseIR / PauseDR
-/// if `pause_after` is true.  This allows for setting the register with multiple calls to
-/// `read_write_reg`, which may be more convenient than manual bit-shifting.
-///
-/// Similar to `write_reg` except it returns the bits that were shifted out during writing.
-pub fn read_write_reg(
-    &mut self,
-    reg: Register,
-    data: &[u8],
-    bits: u8,
-    pause_after: bool,
-) -> Vec<u8> {
-    if reg == Register::Data {
-        self.change_mode(JtagState::ShiftDR);
-    } else {
-        self.change_mode(JtagState::ShiftIR);
-    }
-    let data = self.cable.read_write_data(data, bits, pause_after);
-    if pause_after {
-        if reg == Register::Data {
-            self.state = JtagState::PauseDR;
-        } else {
-            self.state = JtagState::PauseIR;
+// State machine drives only TMS, so the corresponding trait method is Jtag::tms_sequence()
+pub fn drive_state<DEPS>(
+    jtag: &mut impl super::Jtag<DEPS>,
+    mut current: JtagState,
+    target: JtagState,
+) {
+    loop {
+        let tms = current.step_toward(target);
+        if tms == None {
+            return;
         }
-    }
-    data
-}
+        let tms = tms.unwrap();
+        current.update(tms);
 
-pub fn queue_read_write(
-    &mut self,
-    reg: Register,
-    data: &[u8],
-    bits: u8,
-    pause_after: bool,
-) -> bool {
-    if reg == Register::Data {
-        self.change_mode(JtagState::ShiftDR);
-    } else {
-        self.change_mode(JtagState::ShiftIR);
+        let data = if tms { [1u8; 1] } else { [0u8; 1] };
+
+        // feed tms to tms_sequence bit-by-bit
+        jtag.tms_sequence(&data, 1);
     }
-    let data = self.cable.queue_read_write(data, bits, pause_after);
-    if pause_after {
-        if reg == Register::Data {
-            self.state = JtagState::PauseDR;
-        } else {
-            self.state = JtagState::PauseIR;
-        }
-    }
-    data
 }

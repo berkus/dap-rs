@@ -1,3 +1,12 @@
+use crate::{
+    adi::ArmDebugInterface,
+    swd::{APnDP, DPRegister},
+};
+
+///
+/// Tha taps control module lets construct JTAG bitstreams to read and write specific TAPS
+/// via JTAG sequences.
+///
 use super::sm::JtagState;
 
 #[derive(Default, Copy, Clone)]
@@ -60,6 +69,31 @@ fn add_ones_to_end(input: &mut [u8], this_len: usize, shift: usize) -> Result<us
     Ok(bytes_needed)
 }
 
+// @fixme: This is actually part of JTAG impl of ADI (Arm Debug Interface) not JTAG itself..
+// so perhaps impl ArmDebugInterface for Taps? or for Jtag?
+impl ArmDebugInterface for Taps {
+    // this gives read_dp, write_dp, read_ap; no write_ap
+    //==============================================
+    // Public interface - read and write AP/DP regs
+    //==============================================
+
+    // ADIv5.2 B3.4.3
+    // ABORT: IR=ABORT, DR=35bit ABORT REG
+    // DPACC: IR=DPACC, DR=35bit DPACC REG, ACK+value
+    // APACC: IR=APACC, DR=35bit APACC REG - selects AP via DP SELECT register
+
+    fn read_inner(&mut self, apndp: APnDP, reg: DPRegister) -> Result<u32> {
+        self.write_ir(apndp);
+        self.write_dr(reg);
+        self.read_dr()
+    }
+
+    fn write_inner(&mut self, apndp: APnDP, reg: DPRegister, data: u32) -> Result<()> {
+        self.write_ir(apndp);
+        self.write_dr(reg + data);
+    }
+}
+
 impl Taps {
     pub fn setup(&mut self, chain_count: usize, ir_lens: &[u8]) {
         assert!(chain_count <= MAX_TAPS); // replace with ERROR?
@@ -70,9 +104,12 @@ impl Taps {
         self.num_taps = chain_count;
     }
 
+    // IR/DR functions here first select appropriate TAP and then delegate DR/IR writing to lower-level JTAG implementation
     //==================================================================================================================
-    // fixme: the methods below should just generate bit patterns for JTAG_sequence/transfer_wo/_rw impl?
+    // @todo: the methods below should just generate bit patterns for JTAG_sequence/transfer_wo/_rw impl?
     //==================================================================================================================
+    // api shape:
+    // command(self, inbuf, params, outbuf_slice) -> Result<usize>
 
     /// Select which TAP in the scan chain to operate upon. `ir` will be shifted into its
     /// instruction register, and the other TAPs put into bypass.
@@ -80,6 +117,7 @@ impl Taps {
         assert!(tap <= self.num_taps); // make into an ERROR!
 
         // Reset JTAG sm!
+
         // self.jtag_state.reset()
         // tms_sequence([1,1,1,1,1,1], boom); // self.jtag_state = JtagState::Reset;
 
@@ -103,7 +141,7 @@ impl Taps {
     }
 
     /// Shift `ir` into the instruction register of the TAP selected by `select_tap`
-    pub fn write_ir(&mut self, ir: &[u8]) {
+    fn write_ir(&mut self, ir: &[u8]) {
         assert!(self.active_tap.index < self.taps.len());
         let this_irlen = self.taps[self.active_tap.index].ir_len;
         assert_eq!(ir.len(), (this_irlen + 7) / 8);
@@ -129,7 +167,7 @@ impl Taps {
     }
 
     /// Read the instruction register of the TAP selected by `select_tap`
-    pub fn read_ir(&mut self) -> Vec<u8> {
+    fn read_ir(&mut self, buf: &mut &[u8]) -> Result<()> {
         // @todo write into passed-in rxbuf slice
         assert!(self.active_tap.index < self.taps.len());
         let this_irlen = self.taps[self.active_tap.index].ir_len;
@@ -141,14 +179,14 @@ impl Taps {
         // Discard the unwanted bits
         self.sm.change_mode(JtagState::Idle); // no need for this. sm can change itself
         if pad_bits > 0 {
-            self.sm.read_ir(pad_bits);
+            self.sm.read_ir(pad_bits, temp_buf)?;
         }
-        self.sm.read_ir(this_irlen)
+        self.sm.read_ir(this_irlen, buf)
     }
 
     /// Shift `dr` into the data register of the TAP selected by `select_tap`. `bits` indicates
     /// how many bits of the final byte should be written (a value of 8 will write the entire byte)
-    pub fn write_dr(&mut self, dr: &[u8], bits: usize) {
+    fn write_dr(&mut self, dr: &[u8], bits: usize) {
         assert!(self.active_tap.index < self.taps.len());
         let this_len = (dr.len() - 1) * 8 + bits;
         let pad_bits = self.active_tap.index;
@@ -166,49 +204,49 @@ impl Taps {
     /// how many bits of the final byte should be written (a value of 8 will
     /// write the entire byte).  Returns the bits that were shifted out while `dr` was
     /// shifted in.
-    pub fn read_write_dr(&mut self, dr: &[u8], bits: usize) -> Vec<u8> {
-        assert_eq!(self.queued_reads, 0);
-        self.queue_dr_read_write(dr, bits);
-        let total_bits = (dr.len() - 1) * 8 + bits;
-        self.finish_dr_read(total_bits)
-    }
+    // fn read_write_dr(&mut self, dr: &[u8], bits: usize) -> Vec<u8> {
+    //     assert_eq!(self.queued_reads, 0);
+    //     self.queue_dr_read_write(dr, bits);
+    //     let total_bits = (dr.len() - 1) * 8 + bits;
+    //     self.finish_dr_read(total_bits)
+    // }
 
-    pub fn queue_dr_read_write(&mut self, dr: &[u8], bits: usize) -> bool {
-        assert!(self.active_tap.index < self.taps.len());
-        let this_len = (dr.len() - 1) * 8 + bits;
-        let pad_bits = self.active_tap.index;
-        let discard_bits = self.taps.len() - self.active_tap.index - 1;
+    // fn queue_dr_read_write(&mut self, dr: &[u8], bits: usize) -> bool {
+    //     assert!(self.active_tap.index < self.taps.len());
+    //     let this_len = (dr.len() - 1) * 8 + bits;
+    //     let pad_bits = self.active_tap.index;
+    //     let discard_bits = self.taps.len() - self.active_tap.index - 1;
 
-        let mut total_bits = (pad_bits + this_len) % 8;
-        if total_bits == 0 {
-            total_bits = 8;
-        }
-        add_ones_to_end(dr, this_len, pad_bits)?;
-        if discard_bits > 0 {
-            if !self.sm.queue_read_dr(discard_bits) {
-                return false;
-            }
-        }
-        if self.sm.queue_read_write_dr(&dr, total_bits as u8, true) {
-            self.sm.change_mode(JtagState::Idle);
-            self.queued_reads += 1;
-            true
-        } else {
-            self.sm.change_mode(JtagState::Idle);
-            self.dangling_read = discard_bits > 0;
-            false
-        }
-    }
+    //     let mut total_bits = (pad_bits + this_len) % 8;
+    //     if total_bits == 0 {
+    //         total_bits = 8;
+    //     }
+    //     add_ones_to_end(dr, this_len, pad_bits)?;
+    //     if discard_bits > 0 {
+    //         if !self.sm.queue_read_dr(discard_bits) {
+    //             return false;
+    //         }
+    //     }
+    //     if self.sm.queue_read_write_dr(&dr, total_bits as u8, true) {
+    //         self.sm.change_mode(JtagState::Idle);
+    //         self.queued_reads += 1;
+    //         true
+    //     } else {
+    //         self.sm.change_mode(JtagState::Idle);
+    //         self.dangling_read = discard_bits > 0;
+    //         false
+    //     }
+    // }
 
     /// Read the data register of the TAP selected by `select_tap`. `bits` indicates the length of
     /// the data register for the current instruction.
-    pub fn read_dr(&mut self, bits: usize) -> Vec<u8> {
+    fn read_dr(&mut self, bits: usize) -> Vec<u8> {
         assert_eq!(self.queued_reads, 0);
         self.queue_dr_read(bits);
         self.finish_dr_read(bits)
     }
 
-    pub fn queue_dr_read(&mut self, bits: usize) -> bool {
+    fn queue_dr_read(&mut self, bits: usize) -> bool {
         assert!(self.active_tap.index < self.taps.len());
         let pad_bits = self.active_tap.index;
         let discard_bits = self.taps.len() - self.active_tap.index - 1;
@@ -230,7 +268,7 @@ impl Taps {
         }
     }
 
-    pub fn finish_dr_read(&mut self, bits: usize) -> Vec<u8> {
+    fn finish_dr_read(&mut self, bits: usize) -> Vec<u8> {
         assert!(self.active_tap.index < self.taps.len());
         let pad_bits = self.active_tap.index;
         let discard_bits = self.taps.len() - self.active_tap.index - 1;

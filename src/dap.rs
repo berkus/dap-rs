@@ -656,7 +656,7 @@ where
                     let mmask = (transfer_req & (1 << 5)) != 0;
                     let _ts = (transfer_req & (1 << 7)) != 0;
 
-                    let val = if rnw == swd::RnW::W || vmatch || mmask {
+                    let data = if rnw == swd::RnW::W || vmatch || mmask {
                         req.next_u32()
                     } else {
                         0
@@ -671,7 +671,7 @@ where
                         },
                         apndp,
                         a,
-                        val
+                        data
                     );
 
                     // code here drives the TAPs in the following way:
@@ -679,15 +679,15 @@ where
                     // TAP IR and put all other IRs in bypass.
                     // 2.
 
-                    // jtag.taps().select_tap(idx);
+                    // jtag.taps().select_tap(idx); -- no select, we have only one atm..
                     if rnw == swd::RnW::R {
-                        // let mut read_value = jtag.taps().read(apndp, a);
+                        let mut _read_value = jtag.read(5, apndp, a);
                     } else {
                         if mmask {
-                            match_mask = val;
+                            match_mask = data;
                             continue;
                         }
-                        // jtag.taps().write(apndp, a, val);
+                        let _ = jtag.write(5, apndp, a, data);
                     }
                 }
             }

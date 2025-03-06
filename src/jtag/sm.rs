@@ -2,7 +2,7 @@
 
 /// Inner states of the parallel arms (IR-Scan and DR-Scan) of the JTAG state machine.
 #[derive(Clone, Copy, PartialEq, Debug, defmt::Format)]
-pub(crate) enum RegisterState {
+pub enum OperationState {
     Select,
     Capture,
     Shift,
@@ -12,7 +12,7 @@ pub(crate) enum RegisterState {
     Update,
 }
 
-impl RegisterState {
+impl OperationState {
     /// Returns the TMS value that takes a step from the current state toward the target state.
     fn step_toward(self, target: Self) -> bool {
         match self {
@@ -58,8 +58,8 @@ pub enum JtagState {
     #[default]
     Reset,
     Idle,
-    Dr(RegisterState),
-    Ir(RegisterState),
+    Dr(OperationState),
+    Ir(OperationState),
 }
 
 impl JtagState {
@@ -71,9 +71,9 @@ impl JtagState {
             state if target == state => return None,
             Self::Reset => false,
             Self::Idle => true,
-            Self::Dr(RegisterState::Select) => !matches!(target, Self::Dr(_)),
-            Self::Ir(RegisterState::Select) => !matches!(target, Self::Ir(_)),
-            Self::Dr(RegisterState::Update) | Self::Ir(RegisterState::Update) => {
+            Self::Dr(OperationState::Select) => !matches!(target, Self::Dr(_)),
+            Self::Ir(OperationState::Select) => !matches!(target, Self::Ir(_)),
+            Self::Dr(OperationState::Update) | Self::Ir(OperationState::Update) => {
                 matches!(target, Self::Ir(_) | Self::Dr(_))
             }
             Self::Dr(state) => {
@@ -84,7 +84,7 @@ impl JtagState {
                     target
                 } else {
                     // Let's aim for the inner state that can exit the scan arm.
-                    RegisterState::Update
+                    OperationState::Update
                 };
                 state.step_toward(next)
             }
@@ -96,7 +96,7 @@ impl JtagState {
                     target
                 } else {
                     // Let's aim for the inner state that can exit the scan arm.
-                    RegisterState::Update
+                    OperationState::Update
                 };
                 state.step_toward(next)
             }
@@ -109,13 +109,13 @@ impl JtagState {
         *self = match *self {
             Self::Reset if tms => Self::Reset,
             Self::Reset => Self::Idle,
-            Self::Idle if tms => Self::Dr(RegisterState::Select),
+            Self::Idle if tms => Self::Dr(OperationState::Select),
             Self::Idle => Self::Idle,
-            Self::Dr(RegisterState::Select) if tms => Self::Ir(RegisterState::Select),
-            Self::Ir(RegisterState::Select) if tms => Self::Reset,
-            Self::Dr(RegisterState::Update) | Self::Ir(RegisterState::Update) => {
+            Self::Dr(OperationState::Select) if tms => Self::Ir(OperationState::Select),
+            Self::Ir(OperationState::Select) if tms => Self::Reset,
+            Self::Dr(OperationState::Update) | Self::Ir(OperationState::Update) => {
                 if tms {
-                    Self::Dr(RegisterState::Select)
+                    Self::Dr(OperationState::Select)
                 } else {
                     Self::Idle
                 }
@@ -123,27 +123,6 @@ impl JtagState {
             Self::Dr(state) => Self::Dr(state.update(tms)),
             Self::Ir(state) => Self::Ir(state.update(tms)),
         };
-        defmt::trace!("JTAG SM state: {}", *self);
-    }
-}
-
-// State machine drives only TMS, so the corresponding trait method is Jtag::tms_sequence()
-pub fn drive_state<DEPS>(
-    jtag: &mut impl super::Jtag<DEPS>,
-    mut current: JtagState,
-    target: JtagState,
-) {
-    loop {
-        let tms = current.step_toward(target);
-        if tms == None {
-            return;
-        }
-        let tms = tms.unwrap();
-        current.update(tms);
-
-        let data = if tms { [1u8; 1] } else { [0u8; 1] };
-
-        // feed tms to tms_sequence bit-by-bit
-        jtag.tms_sequence(&data, 1);
+        defmt::trace!("JTAG SM input tms {}, new state: {}", tms, *self);
     }
 }

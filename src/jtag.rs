@@ -1,10 +1,12 @@
 mod sm;
 mod taps;
 
-pub use sm::JtagState;
+pub use sm::{JtagState, OperationState};
 pub use taps::Taps;
 
-pub trait Jtag<DEPS>: From<DEPS> {
+use crate::adi::ArmDebugInterface;
+
+pub trait Jtag<DEPS>: From<DEPS> + ArmDebugInterface {
     /// If JTAG is available or not.
     const AVAILABLE: bool;
     type Error;
@@ -22,5 +24,5 @@ pub trait Jtag<DEPS>: From<DEPS> {
     /// Drive state machine to requested state by feeding in a TMS bit sequence.
     fn tms_sequence(&mut self, data: &[u8], nbits: usize);
 
-    fn taps(&mut self) -> &Taps; // to access the TAP sm inside JTAG state?
+    fn taps(&mut self) -> &mut Taps; // to access the TAP sm inside JTAG state?
 }

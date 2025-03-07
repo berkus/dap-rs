@@ -1,4 +1,8 @@
-use crate::{jtag, swd, swj, swo, usb};
+use crate::{
+    jtag,
+    swd::{self, Error},
+    swj, swo, usb,
+};
 
 mod command;
 mod request;
@@ -681,13 +685,38 @@ where
 
                     // jtag.taps().select_tap(idx); -- no select, we have only one atm..
                     if rnw == swd::RnW::R {
-                        let mut _read_value = jtag.read(5, apndp, a);
+                        let res = jtag.read(1, apndp, a);
+                        if let Err(e) = res {
+                            defmt::trace!("Error reading value: {}", e);
+                            let e = match e {
+                                Error::BadParity => 0b10000,
+                                Error::AckWait => 0b00010,
+                                Error::AckFault => 0b00100,
+                                Error::AckProtocol => 0b01000,
+                                Error::AckUnknown(_) => 0b00111,
+                            };
+                            resp.write_u8_at(2, e);
+                        }
+                        let read_value = res.unwrap();
+                        defmt::trace!("Read value {}", read_value);
+                        resp.write_u32(read_value);
                     } else {
                         if mmask {
                             match_mask = data;
                             continue;
                         }
-                        let _ = jtag.write(5, apndp, a, data);
+                        let res = jtag.write(1, apndp, a, data);
+                        if let Err(e) = res {
+                            defmt::trace!("Error writing value: {}", e);
+                            let e = match e {
+                                Error::BadParity => 0b10000,
+                                Error::AckWait => 0b00010,
+                                Error::AckFault => 0b00100,
+                                Error::AckProtocol => 0b01000,
+                                Error::AckUnknown(_) => 0b00111,
+                            };
+                            resp.write_u8_at(2, e);
+                        }
                     }
                 }
             }
